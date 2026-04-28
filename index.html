@@ -62,6 +62,7 @@
               : "light"
             : appearance;
         document.documentElement.dataset.appearance = resolved;
+        document.documentElement.style.colorScheme = resolved;
         const meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.content = resolved === "dark" ? "#000000" : "#F5F5F7";
       })();

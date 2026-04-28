@@ -5,6 +5,7 @@ type Appearance = "system" | "light" | "dark";
 type ResolvedAppearance = "light" | "dark";
 const APPEARANCE_STORAGE_KEY = "appearance";
 const APPEARANCE_DEFAULT_STORAGE_KEY = "appearance_default";
+const SYSTEM_DARK_QUERY = "(prefers-color-scheme: dark)";
 
 interface PrefsState {
   appearance: Appearance;
@@ -19,6 +20,7 @@ const DEFAULTS: PrefsState = {
 let themeFlipTimer: number | null = null;
 let hasExplicitAppearancePreference = false;
 let defaultAppearanceSyncPromise: Promise<void> | null = null;
+let systemAppearanceMediaQuery: MediaQueryList | null = null;
 
 function isAppearance(value: unknown): value is Appearance {
   return value === "system" || value === "light" || value === "dark";
@@ -28,9 +30,15 @@ function normalizeAppearance(value: unknown, fallback: Appearance = DEFAULTS.app
   return isAppearance(value) ? value : fallback;
 }
 
+function getSystemAppearanceMediaQuery() {
+  if (typeof window === "undefined" || !window.matchMedia) return null;
+  systemAppearanceMediaQuery ??= window.matchMedia(SYSTEM_DARK_QUERY);
+  return systemAppearanceMediaQuery;
+}
+
 function resolveAppearance(a: Appearance): ResolvedAppearance {
   if (a === "system") {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return getSystemAppearanceMediaQuery()?.matches ? "dark" : "light";
   }
   return a;
 }
@@ -91,6 +99,16 @@ function markThemeFlip() {
   }, 140);
 }
 
+function applyResolvedAppearance(resolvedAppearance: ResolvedAppearance) {
+  const root = document.documentElement;
+  root.dataset.appearance = resolvedAppearance;
+  root.style.colorScheme = resolvedAppearance;
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (meta) {
+    meta.content = resolvedAppearance === "dark" ? "#000000" : "#F5F5F7";
+  }
+}
+
 function commit(next: Partial<PrefsState>) {
   const merged: PrefsState = { ...snapshot, ...next };
   if (next.appearance) {
@@ -100,7 +118,7 @@ function commit(next: Partial<PrefsState>) {
     markThemeFlip();
   }
   snapshot = merged;
-  document.documentElement.dataset.appearance = merged.resolvedAppearance;
+  applyResolvedAppearance(merged.resolvedAppearance);
   emit();
 }
 
@@ -156,13 +174,23 @@ function initIfNeeded() {
   if (!stored.hasExplicitPreference) {
     void syncDefaultAppearanceFromPublicConfig();
   }
-  window
-    .matchMedia("(prefers-color-scheme: dark)")
-    .addEventListener("change", () => {
-      if (snapshot.appearance === "system") {
-        commit({ appearance: "system" });
-      }
-    });
+  const refreshSystemAppearance = () => {
+    if (snapshot.appearance === "system") {
+      commit({ appearance: "system" });
+    }
+  };
+  const mediaQuery = getSystemAppearanceMediaQuery();
+  if (mediaQuery) {
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", refreshSystemAppearance);
+    } else {
+      mediaQuery.addListener(refreshSystemAppearance);
+    }
+  }
+  window.addEventListener("focus", refreshSystemAppearance);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshSystemAppearance();
+  });
 }
 
 function subscribe(l: () => void) {

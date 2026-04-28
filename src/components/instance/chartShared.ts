@@ -83,12 +83,44 @@ export function formatHourMinuteAxis(_self: uPlot, splits: number[]): string[] {
   });
 }
 
-export function formatTooltipTime(timestampSeconds: number): string {
-  return new Date(timestampSeconds * 1000).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+function pad2(value: number) {
+  return value.toString().padStart(2, "0");
+}
+
+function getDateParts(timestampSeconds: number) {
+  const date = new Date(timestampSeconds * 1000);
+  return {
+    year: date.getFullYear(),
+    month: pad2(date.getMonth() + 1),
+    day: pad2(date.getDate()),
+    hour: pad2(date.getHours()),
+    minute: pad2(date.getMinutes()),
+    second: pad2(date.getSeconds()),
+  };
+}
+
+function formatAxisTime(timestampSeconds: number, rangeHours: number) {
+  const parts = getDateParts(timestampSeconds);
+  if (rangeHours >= 72) return `${parts.month}/${parts.day}`;
+  return `${parts.hour}:${parts.minute}`;
+}
+
+export function createTimeAxisFormatter(rangeHours: number) {
+  return (_self: uPlot, splits: number[]): string[] =>
+    splits.map((value) => formatAxisTime(value, rangeHours));
+}
+
+export function formatTooltipTime(timestampSeconds: number, rangeHours = 0): string {
+  const parts = getDateParts(timestampSeconds);
+  if (rangeHours >= 24) {
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+  }
+  return `${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+export function formatChartCoverageTime(timestampSeconds: number): string {
+  const parts = getDateParts(timestampSeconds);
+  return `${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 function clamp(value: number, min: number, max: number) {

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import UplotReact from "uplot-react";
 import type uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
@@ -7,7 +7,8 @@ import { useLoadRecords } from "@/hooks/useRecords";
 import { useNode } from "@/hooks/useNode";
 import { InstancePanel } from "./InstancePanel";
 import {
-  formatHourMinuteAxis,
+  createTimeAxisFormatter,
+  formatChartCoverageTime,
   formatTooltipTime,
   getChartTooltipPosition,
   toChartSeconds,
@@ -29,6 +30,7 @@ const CHART_COLORS = {
 } as const;
 
 const LOAD_HISTORY_SAMPLE_LIMIT = 360;
+const LOAD_HISTORY_RENDER_LIMIT = 720;
 const REALTIME_HISTORY_SEED_LIMIT = 120;
 const REALTIME_SAMPLE_LIMIT = 600;
 
@@ -44,6 +46,19 @@ const CONNECTION_KEYS = ["connections", "udp"];
 const CONNECTION_COLORS = [CHART_COLORS.memory, CHART_COLORS.cpu];
 const PROCESS_KEYS = ["process"];
 const PROCESS_COLORS = [CHART_COLORS.warning];
+const SERIES_LABELS: Record<string, string> = {
+  cpu: "CPU",
+  ram: "内存",
+  swap: "Swap",
+  disk: "磁盘",
+  diskBytes: "磁盘",
+  netIn: "下行",
+  netOut: "上行",
+  connections: "TCP",
+  udp: "UDP",
+  process: "进程",
+  load: "负载",
+};
 const LOAD_INTERPOLATE_KEYS = [
   "cpu",
   "ram",
@@ -74,6 +89,39 @@ interface TooltipState {
 function metricData(points: ChartPoint[], keys: string[]): uPlot.AlignedData {
   const times = points.map((point) => point.time);
   return [times, ...keys.map((key) => points.map((point) => point[key] ?? null))] as uPlot.AlignedData;
+}
+
+function getHistoryRenderLimit(hours: number) {
+  if (hours <= 4) return LOAD_HISTORY_SAMPLE_LIMIT;
+  return LOAD_HISTORY_RENDER_LIMIT;
+}
+
+function downsamplePoints(points: ChartPoint[], limit: number) {
+  if (points.length <= limit || limit < 2) return points;
+
+  const result: ChartPoint[] = [];
+  const lastIndex = points.length - 1;
+  const step = lastIndex / (limit - 1);
+  let previousIndex = -1;
+
+  for (let index = 0; index < limit; index += 1) {
+    const sourceIndex = Math.min(lastIndex, Math.round(index * step));
+    if (sourceIndex === previousIndex) continue;
+    result.push(points[sourceIndex]);
+    previousIndex = sourceIndex;
+  }
+
+  return result;
+}
+
+function formatRangeSummary(hours: number) {
+  if (hours === 0) return "实时";
+  if (hours % 24 === 0) return `${hours / 24} 天`;
+  return `${hours} 小时`;
+}
+
+function getSeriesLabel(key: string) {
+  return SERIES_LABELS[key] ?? key;
 }
 
 function pointFromNode(node: NonNullable<ReturnType<typeof useNode>>): ChartPoint {
@@ -127,6 +175,7 @@ function useOptions({
   height,
   width,
   resolvedAppearance,
+  rangeHours,
   spanGaps,
   axisKind = "default",
   axisSize = 52,
@@ -138,6 +187,7 @@ function useOptions({
   height: number;
   width: number;
   resolvedAppearance: "light" | "dark";
+  rangeHours: number;
   spanGaps?: boolean;
   axisKind?: "default" | "percent" | "network" | "count";
   axisSize?: number;
@@ -158,8 +208,8 @@ function useOptions({
         stroke: text,
         grid: { stroke: grid, width: 1 },
         ticks: { stroke: grid },
-        size: 34,
-        values: formatHourMinuteAxis,
+        size: rangeHours >= 72 ? 38 : 34,
+        values: createTimeAxisFormatter(rangeHours),
       },
       {
         stroke: text,
@@ -211,6 +261,7 @@ const ChartCard = memo(function ChartCard({
   width,
   height,
   resolvedAppearance,
+  rangeHours,
   unit = "",
   spanGaps,
   axisKind,
@@ -226,6 +277,7 @@ const ChartCard = memo(function ChartCard({
   width: number;
   height: number;
   resolvedAppearance: "light" | "dark";
+  rangeHours: number;
   unit?: string;
   spanGaps?: boolean;
   axisKind?: "default" | "percent" | "network" | "count";
@@ -253,11 +305,12 @@ const ChartCard = memo(function ChartCard({
         height,
         width,
         resolvedAppearance,
+        rangeHours,
         spanGaps,
         axisKind,
         axisSize,
       }),
-    [axisKind, axisSize, colors, height, keys, resolvedAppearance, spanGaps, title, unit, width],
+    [axisKind, axisSize, colors, height, keys, rangeHours, resolvedAppearance, spanGaps, title, unit, width],
   );
 
   const enhancedOptions = useMemo<uPlot.Options>(() => ({
@@ -288,7 +341,7 @@ const ChartCard = memo(function ChartCard({
           const rows = keys.map((key, keyIndex) => {
             const value = currentData[keyIndex + 1]?.[idx] as number | null | undefined;
             return {
-              label: key,
+              label: getSeriesLabel(key),
               value: formatTooltipValue(key, value, unit),
               color: colors[keyIndex] ?? colors[0],
             };
@@ -309,15 +362,18 @@ const ChartCard = memo(function ChartCard({
             left: position.left,
             top: position.top,
             rows,
-            time: formatTooltipTime(timestamp),
+            time: formatTooltipTime(timestamp, rangeHours),
           });
         },
       ],
     },
-  }), [colors, keys, options, unit]);
+  }), [colors, keys, options, rangeHours, unit]);
 
   return (
-    <div className="instance-chart-card">
+    <div
+      className="instance-chart-card"
+      style={{ "--chart-accent": colors[0] } as CSSProperties}
+    >
       <header className="instance-chart-card-head">
         <div className="instance-panel-subhead">
           {icon}
@@ -400,11 +456,11 @@ export function LoadChart({
         load: record.load,
       }))
       .filter((point) => point.time > 0)
-      .sort((a, b) => a.time - b.time)
-      .slice(-LOAD_HISTORY_SAMPLE_LIMIT);
-    const filled = fillMissingMetricPoints(rawPoints);
+      .sort((a, b) => a.time - b.time);
+    const sampled = downsamplePoints(rawPoints, getHistoryRenderLimit(hours));
+    const filled = fillMissingMetricPoints(sampled);
     return interpolateMetricGaps(filled, LOAD_INTERPOLATE_KEYS);
-  }, [data]);
+  }, [data, hours]);
 
   const points = useMemo<ChartPoint[]>(() => {
     if (isRealtime) {
@@ -419,6 +475,18 @@ export function LoadChart({
     return historyPoints;
   }, [historyPoints, isRealtime, realtimePoints]);
 
+  const rangeSummary = formatRangeSummary(hours);
+  const sourceRecordCount = data?.records.length ?? 0;
+  const wasDownsampled = !isRealtime && sourceRecordCount > getHistoryRenderLimit(hours);
+  const sampleSummary = isRealtime
+    ? `${points.length} 个点`
+    : wasDownsampled
+      ? `${points.length} / ${sourceRecordCount} 个点`
+      : `${points.length} 个点`;
+  const coverageSummary = points.length
+    ? `${formatChartCoverageTime(points[0].time)} - ${formatChartCoverageTime(points[points.length - 1].time)}`
+    : "—";
+
   if (isLoading) {
     return <section className="instance-panel h-[260px] animate-pulse" aria-busy />;
   }
@@ -432,8 +500,21 @@ export function LoadChart({
   }
 
   return (
-    <InstancePanel title="负载图表">
+    <InstancePanel
+      title="负载图表"
+      description={coverageSummary}
+      aside={<span className="instance-chart-range-chip">{rangeSummary}</span>}
+      className="instance-chart-panel"
+    >
       <div className="instance-chart-toolbar">
+        <div className="instance-chart-meta" aria-label="图表数据范围">
+          <span>
+            覆盖 <strong>{coverageSummary}</strong>
+          </span>
+          <span>
+            采样 <strong>{sampleSummary}</strong>
+          </span>
+        </div>
         <button
           type="button"
           className="instance-toggle-button instance-switch-button"
@@ -466,6 +547,7 @@ export function LoadChart({
           width={w}
           height={h}
           resolvedAppearance={resolvedAppearance}
+          rangeHours={hours}
           unit="%"
           spanGaps={connectNulls}
           axisKind="percent"
@@ -495,6 +577,7 @@ export function LoadChart({
           width={w}
           height={h}
           resolvedAppearance={resolvedAppearance}
+          rangeHours={hours}
           unit="%"
           spanGaps={connectNulls}
           axisKind="percent"
@@ -516,6 +599,7 @@ export function LoadChart({
           width={w}
           height={h}
           resolvedAppearance={resolvedAppearance}
+          rangeHours={hours}
           unit="%"
           spanGaps={connectNulls}
           axisKind="percent"
@@ -525,15 +609,15 @@ export function LoadChart({
           title="网络"
           value={
             isRealtime && node
-              ? `${formatTrafficRateLabel(node.netUp)} / ${formatTrafficRateLabel(node.netDown)}`
+              ? `${formatTrafficRateLabel(node.netDown)} / ${formatTrafficRateLabel(node.netUp)}`
               : data?.records.length
-                ? `${formatTrafficRateLabel(data.records[data.records.length - 1]?.net_out ?? 0)} / ${formatTrafficRateLabel(data.records[data.records.length - 1]?.net_in ?? 0)}`
+                ? `${formatTrafficRateLabel(data.records[data.records.length - 1]?.net_in ?? 0)} / ${formatTrafficRateLabel(data.records[data.records.length - 1]?.net_out ?? 0)}`
                 : "—"
           }
           note={
             <span className="instance-overview-multi">
-              <span className="inline-flex items-center gap-1"><ArrowUp size={11} />{isRealtime && node ? formatBytes(node.trafficUp) : data?.records.length ? formatBytes(data.records[data.records.length - 1]?.net_total_up ?? 0) : "—"}</span>
               <span className="inline-flex items-center gap-1"><ArrowDown size={11} />{isRealtime && node ? formatBytes(node.trafficDown) : data?.records.length ? formatBytes(data.records[data.records.length - 1]?.net_total_down ?? 0) : "—"}</span>
+              <span className="inline-flex items-center gap-1"><ArrowUp size={11} />{isRealtime && node ? formatBytes(node.trafficUp) : data?.records.length ? formatBytes(data.records[data.records.length - 1]?.net_total_up ?? 0) : "—"}</span>
             </span>
           }
           points={points}
@@ -542,6 +626,7 @@ export function LoadChart({
           width={w}
           height={h}
           resolvedAppearance={resolvedAppearance}
+          rangeHours={hours}
           spanGaps={connectNulls}
           axisKind="network"
           axisSize={78}
@@ -563,6 +648,7 @@ export function LoadChart({
           width={w}
           height={h}
           resolvedAppearance={resolvedAppearance}
+          rangeHours={hours}
           spanGaps={connectNulls}
           axisKind="count"
         />
@@ -589,6 +675,7 @@ export function LoadChart({
           width={w}
           height={h}
           resolvedAppearance={resolvedAppearance}
+          rangeHours={hours}
           spanGaps={connectNulls}
           axisKind="count"
         />

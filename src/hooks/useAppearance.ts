@@ -5,7 +5,9 @@ export function useAppearance() {
   const { resolvedAppearance } = usePreferences();
 
   useEffect(() => {
-    document.documentElement.dataset.appearance = resolvedAppearance;
+    const root = document.documentElement;
+    root.dataset.appearance = resolvedAppearance;
+    root.style.colorScheme = resolvedAppearance;
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (meta) {
       meta.content = resolvedAppearance === "dark" ? "#000000" : "#F5F5F7";
