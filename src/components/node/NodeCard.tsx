@@ -14,6 +14,7 @@ import {
   RefreshCw,
   ExternalLink,
   Power,
+  HardDriveDownload,
 } from "lucide-react";
 import { useNode, useNodeTrafficTrend } from "@/hooks/useNode";
 import { usePingMini, usePingMiniBuckets } from "@/hooks/usePingMini";
@@ -35,7 +36,7 @@ import { Flag } from "@/components/ui/Flag";
 import { MetricBar } from "./MetricBar";
 import { MiniBars } from "./MiniBars";
 import { QualityBars } from "./QualityBars";
-import { CanvasStrip, resolveCssColor } from "./CanvasStrip";
+import { CanvasStrip, resolveCssColor, fillRoundedRect } from "./CanvasStrip";
 import { clsx } from "clsx";
 import type { PingOverviewBucket, TrafficTrendSample } from "@/types/komari";
 import type { TrafficRateDisplay } from "@/utils/format";
@@ -133,6 +134,18 @@ export const NodeCard = memo(function NodeCard({
   const isOnline = node.online === true;
   const isOffline = node.online === false;
   const offlineFor = isOffline ? formatOfflineDuration(node.updatedAt) : null;
+  const trafficUsed = node.trafficUp + node.trafficDown;
+  const hasTrafficLimit = node.traffic_limit > 0;
+  const trafficFraction = hasTrafficLimit
+    ? Math.max(0, Math.min(1, trafficUsed / node.traffic_limit))
+    : 1; // 无限流量显示为满
+  const trafficUsedColor = hasTrafficLimit
+    ? trafficFraction <= 0.5
+      ? "var(--status-success)"
+      : trafficFraction <= 0.8
+        ? "var(--status-warning)"
+        : "var(--status-danger)"
+    : "var(--status-success)"; // 无限流量显示为绿色
 
   return (
     <article
@@ -270,6 +283,79 @@ export const NodeCard = memo(function NodeCard({
               color="var(--status-success)"
               icon={<ArrowDown size={15} strokeWidth={2.4} />}
             />
+          </div>
+
+          <div className="card-metric-section" style={{ marginTop: -10 }}>
+            <div className="metric-item">
+              <div className="flex justify-between items-center gap-3 min-w-0">
+                <div className="flex items-center gap-1.5 text-[var(--text-secondary)] flex-shrink-0">
+                  <HardDriveDownload size={13} strokeWidth={2} />
+                  <span className="text-[11px] font-medium tracking-[0.02em]">流量</span>
+                </div>
+                <div className="tabular text-[13px] whitespace-nowrap overflow-hidden text-ellipsis max-w-full text-right">
+                  <span className="font-semibold" style={{ color: trafficUsedColor }}>
+                    {(() => {
+                      const parts = formatBytes(trafficUsed).split(' ');
+                      return (
+                        <>
+                          {parts[0]}
+                          <span className="ml-[1px] text-[11px] text-[var(--text-tertiary)] font-normal">{parts[1]}</span>
+                        </>
+                      );
+                    })()}
+                  </span>
+                  <span className="mx-[2px] text-[var(--text-tertiary)] font-normal"> / </span>
+                  <span className="font-semibold text-[var(--text-primary)]">
+                    {hasTrafficLimit ? (() => {
+                      const parts = formatBytes(node.traffic_limit).split(' ');
+                      return (
+                        <>
+                          {parts[0]}
+                          <span className="ml-[1px] text-[11px] text-[var(--text-tertiary)] font-normal">{parts[1]}</span>
+                        </>
+                      );
+                    })() : <span className="ml-[1px] text-[11px] text-[var(--text-tertiary)] font-normal">∞</span>}
+                  </span>
+                </div>
+              </div>
+              <div className="metric-track">
+                <CanvasStrip
+                  className="metric-track-canvas"
+                  height={10}
+                  ariaHidden
+                  redrawKey={resolvedAppearance}
+                  draw={(ctx, width, height) => {
+                    const styles = getComputedStyle(document.documentElement);
+                    const inactiveColor = resolveCssColor("var(--progress-bg)", styles);
+                    const gap = 2;
+                    const segmentWidth = Math.max(
+                      1,
+                      (width - gap * (18 - 1)) / 18,
+                    );
+                    const activePaint = resolveCssColor("#66CCFF", styles);
+                    const activeSegments = trafficFraction * 18;
+
+                    for (let index = 0; index < 18; index += 1) {
+                      const x = index * (segmentWidth + gap);
+                      const fillLevel = Math.max(0, Math.min(1, activeSegments - index));
+                      const isActive = fillLevel > 0;
+
+                      ctx.globalAlpha = 0.58;
+                      ctx.fillStyle = inactiveColor;
+                      fillRoundedRect(ctx, x, 0, segmentWidth, height, 2);
+
+                      if (isActive) {
+                        ctx.globalAlpha = 0.42 + fillLevel * 0.56;
+                        ctx.fillStyle = activePaint;
+                        fillRoundedRect(ctx, x, 0, segmentWidth, height, 2);
+                      }
+                    }
+
+                    ctx.globalAlpha = 1;
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="card-metric-section card-metric-divided server-health-grid">

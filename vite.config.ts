@@ -22,15 +22,21 @@ export default defineConfig({
         entryFileNames: "assets/entry-[name]-[hash].js",
         chunkFileNames: "assets/chunk-[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
-        manualChunks: {
-          "react-vendor": [
-            "react",
-            "react-dom",
-            "react-router-dom",
-          ],
-          "uplot": ["uplot", "uplot-react"],
-          "motion": ["framer-motion"],
-          "query": ["@tanstack/react-query"],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
+              return 'react-vendor';
+            }
+            if (id.includes('uplot')) {
+              return 'uplot';
+            }
+            if (id.includes('framer-motion')) {
+              return 'motion';
+            }
+            if (id.includes('@tanstack/react-query')) {
+              return 'query';
+            }
+          }
         },
       },
     },
