@@ -63,7 +63,9 @@ export function PingChart({
 }) {
   const { data, isLoading, refetch } = usePingRecords(uuid, hours, active);
   const { resolvedAppearance } = usePreferences();
-  const { w, h } = useResponsiveChartSize("wide");
+  const { w: fallbackW, h } = useResponsiveChartSize("wide");
+  const chartWrapRef = useRef<HTMLDivElement | null>(null);
+  const [chartWidth, setChartWidth] = useState(fallbackW);
   const [hiddenTasks, setHiddenTasks] = useState<Set<number>>(new Set());
   const [connectNulls, setConnectNulls] = useState(false);
   const [cutPeak, setCutPeak] = useState(false);
@@ -76,6 +78,24 @@ export function PingChart({
     time: "",
   });
   const isDark = resolvedAppearance === "dark";
+
+  useEffect(() => {
+    const element = chartWrapRef.current;
+    if (!element) return;
+
+    const updateWidth = () => {
+      const nextWidth = Math.floor(element.getBoundingClientRect().width);
+      if (nextWidth > 0) {
+        setChartWidth(Math.max(300, nextWidth));
+      }
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   const tasks = useMemo(() => [...(data?.tasks ?? [])].sort((a, b) => a.id - b.id), [data]);
   const taskLabels = useMemo(() => {
     const counts = new Map<string, number>();
@@ -208,7 +228,7 @@ export function PingChart({
     const grid = isDark ? "rgba(255,255,255,0.065)" : "rgba(0,0,0,0.08)";
     const text = isDark ? "#a5a5aa" : "#52525b";
     return {
-      width: w,
+      width: chartWidth,
       height: h,
       padding: [10, 14, 12, 2],
       cursor: { drag: { x: true, y: false } },
@@ -296,7 +316,7 @@ export function PingChart({
         ],
       },
     };
-  }, [chart, connectNulls, h, hiddenTasks, isDark, taskColors, taskIndexById, taskLabels, tasks, visibleTasks, w, yRange]);
+  }, [chart, chartWidth, connectNulls, h, hiddenTasks, isDark, taskColors, taskIndexById, taskLabels, tasks, visibleTasks, yRange]);
 
   const taskStats = useMemo(() => {
     const grouped = new Map<number, PingRecord[]>();
@@ -453,7 +473,7 @@ export function PingChart({
         })}
       </div>
 
-      <div className="instance-uplot-wrap is-large">
+      <div ref={chartWrapRef} className="instance-uplot-wrap is-large instance-ping-chart-wrap">
         {chart && options ? (
           <>
             <UplotReact options={options} data={chart} />
