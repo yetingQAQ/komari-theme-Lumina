@@ -1438,6 +1438,49 @@
   font-size: 12px;
 }
 
+.traffic-quota-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.traffic-quota-amount {
+  font-weight: 640;
+}
+
+.traffic-quota-limit {
+  color: var(--text-primary);
+}
+
+.traffic-quota-unit {
+  margin-left: 1px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.traffic-quota-separator {
+  margin: 0 4px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.traffic-quota-empty {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.traffic-quota-track {
+  margin-top: 1px;
+}
+
 .traffic-stat-total-label {
   display: inline-flex;
   align-items: center;

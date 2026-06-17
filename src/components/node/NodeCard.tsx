@@ -285,40 +285,24 @@ export const NodeCard = memo(function NodeCard({
             />
           </div>
 
-          <div className="card-metric-section" style={{ marginTop: -10 }}>
-            <div className="metric-item">
-              <div className="flex justify-between items-center gap-3 min-w-0">
-                <div className="flex items-center gap-1.5 text-[var(--text-secondary)] flex-shrink-0">
+          <div className="card-metric-section card-metric-divided server-traffic-quota-section">
+            <div className="server-health-block">
+              <div className="server-health-head">
+                <div className="server-health-label">
                   <HardDriveDownload size={13} strokeWidth={2} />
-                  <span className="text-[11px] font-medium tracking-[0.02em]">流量</span>
+                  <span>流量</span>
                 </div>
-                <div className="tabular text-[13px] whitespace-nowrap overflow-hidden text-ellipsis max-w-full text-right">
-                  <span className="font-semibold" style={{ color: trafficUsedColor }}>
-                    {(() => {
-                      const parts = formatBytes(trafficUsed).split(' ');
-                      return (
-                        <>
-                          {parts[0]}
-                          <span className="ml-[1px] text-[11px] text-[var(--text-tertiary)] font-normal">{parts[1]}</span>
-                        </>
-                      );
-                    })()}
-                  </span>
-                  <span className="mx-[2px] text-[var(--text-tertiary)] font-normal"> / </span>
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    {hasTrafficLimit ? (() => {
-                      const parts = formatBytes(node.traffic_limit).split(' ');
-                      return (
-                        <>
-                          {parts[0]}
-                          <span className="ml-[1px] text-[11px] text-[var(--text-tertiary)] font-normal">{parts[1]}</span>
-                        </>
-                      );
-                    })() : <span className="ml-[1px] text-[11px] text-[var(--text-tertiary)] font-normal">∞</span>}
-                  </span>
-                </div>
+                <span className="server-health-value traffic-quota-value tabular">
+                  <ByteAmount value={trafficUsed} color={trafficUsedColor} />
+                  <span className="traffic-quota-separator">/</span>
+                  {hasTrafficLimit ? (
+                    <ByteAmount value={node.traffic_limit} className="traffic-quota-limit" />
+                  ) : (
+                    <span className="traffic-quota-empty">∞</span>
+                  )}
+                </span>
               </div>
-              <div className="metric-track">
+              <div className="metric-track traffic-quota-track">
                 <CanvasStrip
                   className="metric-track-canvas"
                   height={10}
@@ -328,14 +312,15 @@ export const NodeCard = memo(function NodeCard({
                     const styles = getComputedStyle(document.documentElement);
                     const inactiveColor = resolveCssColor("var(--progress-bg)", styles);
                     const gap = 2;
+                    const segmentCount = 18;
                     const segmentWidth = Math.max(
                       1,
-                      (width - gap * (18 - 1)) / 18,
+                      (width - gap * (segmentCount - 1)) / segmentCount,
                     );
-                    const activePaint = resolveCssColor("#66CCFF", styles);
-                    const activeSegments = trafficFraction * 18;
+                    const activePaint = resolveCssColor("#66ccff", styles);
+                    const activeSegments = trafficFraction * segmentCount;
 
-                    for (let index = 0; index < 18; index += 1) {
+                    for (let index = 0; index < segmentCount; index += 1) {
                       const x = index * (segmentWidth + gap);
                       const fillLevel = Math.max(0, Math.min(1, activeSegments - index));
                       const isActive = fillLevel > 0;
@@ -497,6 +482,25 @@ export const NodeCard = memo(function NodeCard({
     </article>
   );
 });
+
+function ByteAmount({
+  value,
+  color,
+  className,
+}: {
+  value: number;
+  color?: string;
+  className?: string;
+}) {
+  const [amount, unit = ""] = formatBytes(value).split(/\s+/);
+
+  return (
+    <span className={clsx("traffic-quota-amount", className)} style={color ? { color } : undefined}>
+      {amount}
+      {unit && <span className="traffic-quota-unit">{unit}</span>}
+    </span>
+  );
+}
 
 function TrafficStat({
   direction,

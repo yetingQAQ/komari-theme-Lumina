@@ -1,9 +1,9 @@
 {
   "name": "Lumina",
   "short": "Lumina",
-  "description": "Komari theme",
-  "version": "1.1.3",
+  "description": "基于shark大佬的Lumina的修改版",
+  "version": "1.1.4",
   "author": "shark & codex",
-  "url": "https://github.com/stqfdyr/komari-theme-Lumina",
+  "url": "https://github.com/yetingQAQ/komari-theme-Lumina",
   "preview": "preview.png"
 }
