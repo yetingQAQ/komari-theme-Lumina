@@ -933,12 +933,6 @@
   margin-top: 16px;
 }
 
-.instance-ping-chart-wrap {
-  grid-column: 1 / -1;
-  width: 100%;
-  min-width: 0;
-}
-
 .instance-chart-tooltip {
   position: absolute;
   z-index: 5;
